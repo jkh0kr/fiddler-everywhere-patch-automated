@@ -39,7 +39,7 @@ on:
         required: true
         default: 'Google'
       patch-language:
-        description: 'Enable Chinese UI'
+        description: 'Enable Korean/Chinese UI' # 한국어/중국어 패치로 설명 변경
         required: true
         type: choice
         default: 'No'
@@ -215,7 +215,7 @@ jobs:
           path: Yui/
           if-no-files-found: error
 
-  download-msojocs-server:
+  download-jkh0kr-server:
     runs-on: ubuntu-latest
     needs: validate-version
     
@@ -224,8 +224,9 @@ jobs:
     steps:
       - name: Set up Git
         run: |
+          # 본인의 저장소(jkh0kr)로 연결합니다.
           git init
-          git remote add origin https://github.com/msojocs/fiddler-everywhere-enhance.git
+          git remote add origin https://github.com/jkh0kr/fiddler-everywhere-enhance.git
           git config core.sparseCheckout true
 
       - name: Configure sparse-checkout to download the server directory
@@ -235,17 +236,18 @@ jobs:
 
       - name: Move the downloaded directory to the target folder
         run: |
-          mkdir -p msojocs
-          Move-Item -Path "server" -Destination "msojocs/"
+          # 다운로드 폴더명을 jkh0kr로 변경합니다.
+          mkdir -p jkh0kr
+          Move-Item -Path "server" -Destination "jkh0kr/"
 
-      - name: List files in the msojocs/server directory
-        run: Get-ChildItem -Path msojocs\server
+      - name: List files in the jkh0kr/server directory
+        run: Get-ChildItem -Path jkh0kr\server
 
-      - name: Upload msojocs folder as an artifact
+      - name: Upload jkh0kr folder as an artifact
         uses: actions/upload-artifact@v7
         with:
-          name: msojocs-patch
-          path: msojocs/
+          name: jkh0kr-patch
+          path: jkh0kr/
           if-no-files-found: error
 
   download-fiddler-everywhere-windows:
@@ -384,7 +386,7 @@ jobs:
 
     needs:
       - download-Yui-patch
-      - download-msojocs-server
+      - download-jkh0kr-server # 기존 msojocs 에서 jkh0kr 로 변경
       - validate-version
       - download-fiddler-everywhere-windows
       - download-fiddler-everywhere-linux
@@ -401,11 +403,11 @@ jobs:
           name: Yui-patch
           path: Yui-patch
 
-      - name: Download msojocs-Server
+      - name: Download jkh0kr-Server
         uses: actions/download-artifact@v8
         with:
-          name: msojocs-patch
-          path: msojocs-patch
+          name: jkh0kr-patch # 다운로드 받을 아티팩트 이름 수정
+          path: jkh0kr-patch
 
       - name: Download FE
         uses: actions/download-artifact@v8
@@ -416,7 +418,7 @@ jobs:
       - name: List the contents of the downloaded artifacts
         run: |
           Get-ChildItem -Recurse Yui-patch
-          Get-ChildItem -Recurse msojocs-patch
+          Get-ChildItem -Recurse jkh0kr-patch
           Get-ChildItem -Recurse fe_app
 
       - name: Rename main FE folder
@@ -444,7 +446,8 @@ jobs:
 
       - name: Copy Server Folder
         run: |
-          $source_server_folder = "msojocs-patch/server/file"
+          # jkh0kr 서버 폴더 내 파일 복사
+          $source_server_folder = "jkh0kr-patch/server/file"
           $destination_server_folder = "FE/resources/app/out"
 
           if (Test-Path $source_server_folder) {
@@ -453,22 +456,23 @@ jobs:
             Write-Host "Source Server Folder not found"
           }
 
-      - name: Enable Chinese translation
+      - name: Enable Translation (Korean/Chinese)
         if: startsWith(env.PATCH_LANGUAGE, 'Yes')
         run: |
-          $translate_js = "msojocs-patch/server/translate.js"
+          # 한국어/중국어 패치 파일 복사 처리
+          $translate_js = "jkh0kr-patch/server/translate.js"
           $dest_translate = "FE/resources/app/out/translate.js"
 
           if (Test-Path $translate_js) {
             Copy-Item -Path $translate_js -Destination $dest_translate -Force
-            Write-Host "translate.js copied, Chinese language enabled (Ctrl+T to switch)"
+            Write-Host "translate.js copied, Custom language enabled (Ctrl+T to switch)"
           } else {
             Write-Host "translate.js not found in server directory"
           }
 
       - name: Set patch server port (in main.js of server)
         run: |
-          $source_index = "msojocs-patch/server/index.js"
+          $source_index = "jkh0kr-patch/server/index.js"
           $index_content = Get-Content -Path $source_index -Raw
 
           if (Test-Path $source_index) {
@@ -499,7 +503,7 @@ jobs:
 
           $new_main = "FE/resources/app/out/main.original.js"
 
-          $source_index = "msojocs-patch/server/index.js"
+          $source_index = "jkh0kr-patch/server/index.js"
           $index_content = Get-Content -Path $source_index -Raw
           
           if ((Test-Path $source_main) -and (Test-Path $source_index)) {
@@ -512,12 +516,12 @@ jobs:
             Write-Host "Source main.js or index.js (from server) not found"
           }
 
-      - name: Clean msojocs-patch
+      - name: Clean jkh0kr-patch
         run: |
-          if (Test-Path msojocs-patch) {
-            Remove-Item -Path "msojocs-patch" -Recurse
+          if (Test-Path jkh0kr-patch) {
+            Remove-Item -Path "jkh0kr-patch" -Recurse
           } else {
-            Write-Host "msojocs-patch Folder not found"
+            Write-Host "jkh0kr-patch Folder not found"
           }
 
       - name: Rename FE 
