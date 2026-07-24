@@ -6,7 +6,15 @@ on:
       version_to_patch:
         description: 'The Version You Want to Patch'
         required: true
-        default: '7.7.2'
+        default: '8.0.1'
+      bypass-version-check:
+        description: 'Bypass version validation check (Ignore if version is not in the list)'
+        required: true
+        type: choice
+        default: 'Yes' # 기본값을 Yes로 두어 바로 패스가 가능하게 설정
+        options:
+          - 'No'
+          - 'Yes'
       os-and-arch:
         description: 'Operating System And Architecture'
         required: true
@@ -39,7 +47,7 @@ on:
         required: true
         default: 'Google'
       patch-language:
-        description: 'Enable Korean/Chinese UI' # 한국어/중국어 패치로 설명 변경
+        description: 'Enable Korean/Chinese UI'
         required: true
         type: choice
         default: 'No'
@@ -54,6 +62,7 @@ defaults:
 env:
   OS_ARCH: ${{ github.event.inputs.os-and-arch }}
   VERSION_TO_PATCH: ${{ github.event.inputs.version_to_patch }}
+  BYPASS_VERSION_CHECK: ${{ github.event.inputs.bypass-version-check }}
   PATCH_SERVER_PORT: ${{ github.event.inputs.patch-server-port }}
   PATCH_USER_EMAIL: ${{ github.event.inputs.patch-user-email }}
   PATCH_USER_FNAME: ${{ github.event.inputs.patch-user-firstName }}
@@ -76,7 +85,14 @@ jobs:
         id: get_validity
         working-directory: utils/fe-version-validator
         run: |
-          ./Validate-FEVersion.ps1 -VersionToPatch $env:VERSION_TO_PATCH
+          # 사용자가 Bypass를 Yes로 선택했는지 확인합니다.
+          if ($env:BYPASS_VERSION_CHECK -eq 'Yes') {
+            Write-Host "✅ Version validation bypassed by user. Forcing success."
+            "is_valid=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "🔎 Running normal version validation..."
+            ./Validate-FEVersion.ps1 -VersionToPatch $env:VERSION_TO_PATCH
+          }
 
   init_os_arch:
     runs-on: ubuntu-latest
@@ -193,14 +209,9 @@ jobs:
           Write-Host "EXTENSION = $env:LIBRARY_EXTENSION"
           Write-Host "ARCH CODE =  $env:ARCH_CODE"
           try {
-            # Build the download URLs
             $YuiFiddlerUrl = "https://github.com/project-yui/Yui-patch/releases/download/$env:Yui_RELEASE/$env:YUI_NAME-$env:Yui_FIDDLER_NAME_NO_EXTENSION-$env:ARCH_CODE-$env:Yui_RELEASE.$env:LIBRARY_EXTENSION"
-            
-            # Print the URLs to ensure they're correct
             Write-Host "Downloading files from $env:Yui_RELEASE"
             Write-Host "Yui Fiddler URL: $YuiFiddlerUrl"
-
-            # Download the files
             Invoke-WebRequest -Uri $YuiFiddlerUrl -OutFile "Yui\$env:Yui_FIDDLER_NAME"
           }
           catch {
@@ -224,7 +235,6 @@ jobs:
     steps:
       - name: Set up Git
         run: |
-          # 본인의 저장소(jkh0kr)로 연결합니다.
           git init
           git remote add origin https://github.com/jkh0kr/fiddler-everywhere-enhance.git
           git config core.sparseCheckout true
@@ -236,7 +246,6 @@ jobs:
 
       - name: Move the downloaded directory to the target folder
         run: |
-          # 다운로드 폴더명을 jkh0kr로 변경합니다.
           mkdir -p jkh0kr
           Move-Item -Path "server" -Destination "jkh0kr/"
 
@@ -259,17 +268,12 @@ jobs:
     steps:
       - name: Build URL & Download
         run: |
-          # Retrieve the patchingVersion version from the previous step
           $patchingVersion = $env:VERSION_TO_PATCH
           
-          # Check if the patchingVersion version is available
           if (-not [string]::IsNullOrEmpty($patchingVersion)) {
             $downloadUrl = "https://downloads.getfiddler.com/win/Fiddler%20Everywhere%20$patchingVersion.exe"
-          
             Write-Host "Download URL: $downloadUrl"
-
             Invoke-WebRequest -Uri $downloadUrl -OutFile "FiddlerEverywhereSetup.exe"
-            
           } else {
             Write-Host "PATCHING_VERSION is empty or not set"
             exit 1
@@ -297,17 +301,12 @@ jobs:
     steps:
       - name: Build URL & Download
         run: |
-          # Retrieve the version to patch from the previous step
           $patchingVersion = $env:VERSION_TO_PATCH
           
-          # Check if the patchingVersion version is available
           if (-not [string]::IsNullOrEmpty($patchingVersion)) {
             $downloadUrl = "https://downloads.getfiddler.com/linux/fiddler-everywhere-$patchingVersion.AppImage"
-          
             Write-Host "Download URL: $downloadUrl"
-
             Invoke-WebRequest -Uri $downloadUrl -OutFile "FiddlerEverywhereSetup.AppImage"
-            
           } else {
             Write-Host "VERSION_TO_PATCH is empty or not set"
             exit 1
@@ -340,10 +339,8 @@ jobs:
     steps:
       - name: Build URL & Download
         run: |
-          # Retrieve the version_to_patch version from the previous step
           $patchingVersion = $env:VERSION_TO_PATCH
           
-          # Check if the version_to_patch version is available
           if (-not [string]::IsNullOrEmpty($patchingVersion)) {
             $downloadUrl = "null"
 
@@ -352,15 +349,13 @@ jobs:
             } elseif ($env:ARCH_CODE -eq "arm64") {
               $downloadUrl = "https://downloads.getfiddler.com/mac-arm64/Fiddler%20Everywhere%20$patchingVersion.dmg"
             } elseif ($env:ARCH_CODE -eq "arm64e") {
-              //Don't know
+              # Don't know
             } else {
               throw "Unsupported OS architecture: $env:ARCH_CODE"
             }
           
             Write-Host "Download URL: $downloadUrl"
-
             Invoke-WebRequest -Uri $downloadUrl -OutFile "FiddlerEverywhereSetup.dmg"
-            
           } else {
             Write-Host "VERSION_TO_PATCH is empty or not set"
             exit 1
@@ -386,7 +381,7 @@ jobs:
 
     needs:
       - download-Yui-patch
-      - download-jkh0kr-server # 기존 msojocs 에서 jkh0kr 로 변경
+      - download-jkh0kr-server
       - validate-version
       - download-fiddler-everywhere-windows
       - download-fiddler-everywhere-linux
@@ -406,7 +401,7 @@ jobs:
       - name: Download jkh0kr-Server
         uses: actions/download-artifact@v8
         with:
-          name: jkh0kr-patch # 다운로드 받을 아티팩트 이름 수정
+          name: jkh0kr-patch
           path: jkh0kr-patch
 
       - name: Download FE
@@ -446,7 +441,6 @@ jobs:
 
       - name: Copy Server Folder
         run: |
-          # jkh0kr 서버 폴더 내 파일 복사
           $source_server_folder = "jkh0kr-patch/server/file"
           $destination_server_folder = "FE/resources/app/out"
 
@@ -459,7 +453,6 @@ jobs:
       - name: Enable Translation (Korean/Chinese)
         if: startsWith(env.PATCH_LANGUAGE, 'Yes')
         run: |
-          # 한국어/중국어 패치 파일 복사 처리
           $translate_js = "jkh0kr-patch/server/translate.js"
           $dest_translate = "FE/resources/app/out/translate.js"
 
@@ -508,9 +501,7 @@ jobs:
           
           if ((Test-Path $source_main) -and (Test-Path $source_index)) {
             Copy-Item -Path $source_main -Destination $new_main
-
             $appended_content = $index_content + $main_content
-
             Set-Content -Path $source_main -Value $appended_content
           } else {
             Write-Host "Source main.js or index.js (from server) not found"
@@ -529,9 +520,7 @@ jobs:
         run: |
           if (Test-Path FE) {
             $newName = "Fiddler-Everywhere-V$env:VERSION_TO_PATCH-Patched"
-            
             Rename-Item -Path "FE" -NewName $newName
-            
             echo "patched-fe-name=$newName" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
           } else {
             Write-Host "FE Folder not found!?"
